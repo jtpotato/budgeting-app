@@ -14,21 +14,21 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { Bucket } from "@/lib/types";
 
-interface AddPaymentDialogProps {
+interface AddExpenseDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onPayment: (bucketId: string, amount: number, description?: string) => Promise<boolean>;
+  onExpense: (bucketId: string, amount: number, description?: string) => Promise<boolean>;
   buckets: Bucket[];
   children: React.ReactNode;
 }
 
-export function AddPaymentDialog({
+export function AddExpenseDialog({
   open,
   onOpenChange,
-  onPayment,
+  onExpense,
   buckets,
   children,
-}: AddPaymentDialogProps) {
+}: AddExpenseDialogProps) {
   const [bucketId, setBucketId] = useState("");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
@@ -39,7 +39,7 @@ export function AddPaymentDialog({
     if (isNaN(parsedAmount) || parsedAmount <= 0 || !bucketId) return;
 
     setIsSubmitting(true);
-    const success = await onPayment(bucketId, parsedAmount, description.trim() || undefined);
+    const success = await onExpense(bucketId, parsedAmount, description.trim() || undefined);
     setIsSubmitting(false);
 
     if (success) {
@@ -55,14 +55,14 @@ export function AddPaymentDialog({
       {children}
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Payment</DialogTitle>
-          <DialogDescription>Record a payment from a bucket</DialogDescription>
+          <DialogTitle>Add Expense</DialogTitle>
+          <DialogDescription>Record an expense from a bucket</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div>
-            <Label htmlFor="payment-bucket">Bucket</Label>
+            <Label htmlFor="expense-bucket">Bucket</Label>
             <select
-              id="payment-bucket"
+              id="expense-bucket"
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               value={bucketId}
               onChange={(e) => setBucketId(e.target.value)}
@@ -76,9 +76,9 @@ export function AddPaymentDialog({
             </select>
           </div>
           <div>
-            <Label htmlFor="payment-amount">Amount</Label>
+            <Label htmlFor="expense-amount">Amount</Label>
             <Input
-              id="payment-amount"
+              id="expense-amount"
               type="number"
               step="0.01"
               value={amount}
@@ -87,9 +87,9 @@ export function AddPaymentDialog({
             />
           </div>
           <div>
-            <Label htmlFor="payment-description">Description (optional)</Label>
+            <Label htmlFor="expense-description">Description (optional)</Label>
             <Input
-              id="payment-description"
+              id="expense-description"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="e.g., Groceries, Rent"
@@ -98,7 +98,7 @@ export function AddPaymentDialog({
         </div>
         <DialogFooter>
           <Button onClick={handleSubmit} disabled={isSubmitting}>
-            {isSubmitting ? "Processing..." : "Add Payment"}
+            {isSubmitting ? "Processing..." : "Add Expense"}
           </Button>
         </DialogFooter>
       </DialogContent>

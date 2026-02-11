@@ -14,10 +14,10 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { type, amount, bucketId, bucketName, description } = body;
+    const { type, amount, bucketId, bucketName, fromBucketId, fromBucketName, toBucketId, toBucketName, description } = body;
 
-    if (!type || !['deposit', 'payment'].includes(type)) {
-      return NextResponse.json({ error: 'Valid type (deposit or payment) is required' }, { status: 400 });
+    if (!type || !['income', 'expense', 'transfer', 'allocation'].includes(type)) {
+      return NextResponse.json({ error: 'Valid type (income, expense, transfer, or allocation) is required' }, { status: 400 });
     }
 
     if (amount === undefined || typeof amount !== 'number' || amount <= 0) {
@@ -30,6 +30,10 @@ export async function POST(request: NextRequest) {
       amount,
       bucketId,
       bucketName,
+      fromBucketId,
+      fromBucketName,
+      toBucketId,
+      toBucketName,
       timestamp: Date.now(),
       description,
     });

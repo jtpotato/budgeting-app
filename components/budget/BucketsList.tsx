@@ -6,13 +6,11 @@ import { BucketCard } from "./BucketCard";
 interface BucketsListProps {
   buckets: Bucket[];
   onDelete: (id: string) => Promise<boolean>;
-  onUpdateBalance: (id: string, balance: number) => Promise<boolean>;
 }
 
 export function BucketsList({
   buckets,
   onDelete,
-  onUpdateBalance,
 }: BucketsListProps) {
   if (buckets.length === 0) {
     return (
@@ -31,7 +29,6 @@ export function BucketsList({
           name={bucket.name}
           balance={bucket.balance}
           onDelete={onDelete}
-          onUpdateBalance={onUpdateBalance}
         />
       ))}
     </div>

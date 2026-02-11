@@ -6,16 +6,19 @@ export interface Bucket {
 
 export interface Transaction {
   id: string;
-  type: 'deposit' | 'payment';
+  type: 'income' | 'expense' | 'transfer' | 'allocation';
   amount: number;
   bucketId?: string;
   bucketName?: string;
+  fromBucketId?: string;
+  fromBucketName?: string;
+  toBucketId?: string;
+  toBucketName?: string;
   timestamp: number;
   description?: string;
 }
 
 export interface AppState {
-  totalBalance: number;
   buckets: Bucket[];
   transactions: Transaction[];
 }

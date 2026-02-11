@@ -27,21 +27,27 @@ function initDb() {
 
     CREATE TABLE IF NOT EXISTS transactions (
       id TEXT PRIMARY KEY,
-      type TEXT CHECK(type IN ('deposit', 'payment')) NOT NULL,
+      type TEXT CHECK(type IN ('income', 'expense', 'transfer', 'allocation')) NOT NULL,
       amount REAL NOT NULL,
       bucket_id TEXT,
       bucket_name TEXT,
+      from_bucket_id TEXT,
+      from_bucket_name TEXT,
+      to_bucket_id TEXT,
+      to_bucket_name TEXT,
       timestamp INTEGER NOT NULL,
       description TEXT,
-      FOREIGN KEY (bucket_id) REFERENCES buckets(id) ON DELETE SET NULL
+      FOREIGN KEY (bucket_id) REFERENCES buckets(id) ON DELETE SET NULL,
+      FOREIGN KEY (from_bucket_id) REFERENCES buckets(id) ON DELETE SET NULL,
+      FOREIGN KEY (to_bucket_id) REFERENCES buckets(id) ON DELETE SET NULL
     );
 
-    CREATE TABLE IF NOT EXISTS total_balance (
+    CREATE TABLE IF NOT EXISTS free_money (
       id INTEGER PRIMARY KEY CHECK(id = 1),
       amount REAL NOT NULL DEFAULT 0
     );
 
-    INSERT OR IGNORE INTO total_balance (id, amount) VALUES (1, 0);
+    INSERT OR IGNORE INTO free_money (id, amount) VALUES (1, 0);
   `);
 }
 
@@ -90,6 +96,10 @@ export function getAllTransactions(): Transaction[] {
       amount, 
       bucket_id as bucketId, 
       bucket_name as bucketName, 
+      from_bucket_id as fromBucketId, 
+      from_bucket_name as fromBucketName, 
+      to_bucket_id as toBucketId, 
+      to_bucket_name as toBucketName, 
       timestamp, 
       description 
     FROM transactions 
@@ -100,8 +110,8 @@ export function getAllTransactions(): Transaction[] {
 
 export function createTransaction(transaction: Transaction): Transaction {
   const stmt = getDb().prepare(`
-    INSERT INTO transactions (id, type, amount, bucket_id, bucket_name, timestamp, description)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO transactions (id, type, amount, bucket_id, bucket_name, from_bucket_id, from_bucket_name, to_bucket_id, to_bucket_name, timestamp, description)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   stmt.run(
     transaction.id,
@@ -109,57 +119,73 @@ export function createTransaction(transaction: Transaction): Transaction {
     transaction.amount,
     transaction.bucketId || null,
     transaction.bucketName || null,
+    transaction.fromBucketId || null,
+    transaction.fromBucketName || null,
+    transaction.toBucketId || null,
+    transaction.toBucketName || null,
     transaction.timestamp,
     transaction.description || null
   );
   return transaction;
 }
 
-// Balance operations
-export function getTotalBalance(): number {
-  const stmt = getDb().prepare('SELECT amount FROM total_balance WHERE id = 1');
+// Free money operations
+export function getFreeMoney(): number {
+  const stmt = getDb().prepare('SELECT amount FROM free_money WHERE id = 1');
   const row = stmt.get() as { amount: number } | undefined;
   return row?.amount ?? 0;
 }
 
-export function updateTotalBalance(amount: number): void {
-  const stmt = getDb().prepare('UPDATE total_balance SET amount = ? WHERE id = 1');
+export function updateFreeMoney(amount: number): void {
+  const stmt = getDb().prepare('UPDATE free_money SET amount = ? WHERE id = 1');
   stmt.run(amount);
 }
 
 // Business logic operations
-export function processDeposit(amount: number, description?: string): { balance: number; transaction: Transaction } {
+export function processIncomeToFreeMoney(amount: number, description?: string): { 
+  success: boolean; 
+  transaction?: Transaction; 
+  error?: string;
+} {
   const db = getDb();
-  const currentBalance = getTotalBalance();
-  const newBalance = currentBalance + amount;
-  
+  const currentFreeMoney = getFreeMoney();
+  const newFreeMoney = currentFreeMoney + amount;
+
   const transaction: Transaction = {
     id: crypto.randomUUID(),
-    type: 'deposit',
+    type: 'income',
     amount,
     timestamp: Date.now(),
     description,
   };
 
-  const updateBalance = db.prepare('UPDATE total_balance SET amount = ? WHERE id = 1');
-  const insertTransaction = db.prepare(`
+  const updateFreeMoneyStmt = db.prepare('UPDATE free_money SET amount = ? WHERE id = 1');
+  const insertTransactionStmt = db.prepare(`
     INSERT INTO transactions (id, type, amount, bucket_id, bucket_name, timestamp, description)
     VALUES (?, ?, ?, NULL, NULL, ?, ?)
   `);
 
-  const updateBoth = db.transaction(() => {
-    updateBalance.run(newBalance);
-    insertTransaction.run(transaction.id, transaction.type, transaction.amount, transaction.timestamp, transaction.description || null);
+  const processAll = db.transaction(() => {
+    updateFreeMoneyStmt.run(newFreeMoney);
+    insertTransactionStmt.run(
+      transaction.id, 
+      transaction.type, 
+      transaction.amount, 
+      transaction.timestamp, 
+      transaction.description || null
+    );
   });
 
-  updateBoth();
+  processAll();
 
-  return { balance: newBalance, transaction };
+  return { 
+    success: true, 
+    transaction 
+  };
 }
 
-export function processPayment(bucketId: string, amount: number, description?: string): { 
+export function allocateFromFreeMoney(bucketId: string, amount: number, description?: string): { 
   success: boolean; 
-  balance?: number; 
   transaction?: Transaction; 
   error?: string;
 } {
@@ -170,17 +196,17 @@ export function processPayment(bucketId: string, amount: number, description?: s
     return { success: false, error: 'Bucket not found' };
   }
 
-  if (bucket.balance < amount) {
-    return { success: false, error: 'Insufficient funds in bucket' };
+  const currentFreeMoney = getFreeMoney();
+  if (currentFreeMoney < amount) {
+    return { success: false, error: 'Insufficient free money' };
   }
 
-  const currentTotalBalance = getTotalBalance();
-  const newBucketBalance = bucket.balance - amount;
-  const newTotalBalance = currentTotalBalance - amount;
+  const newFreeMoney = currentFreeMoney - amount;
+  const newBucketBalance = bucket.balance + amount;
 
   const transaction: Transaction = {
     id: crypto.randomUUID(),
-    type: 'payment',
+    type: 'allocation',
     amount,
     bucketId,
     bucketName: bucket.name,
@@ -188,16 +214,16 @@ export function processPayment(bucketId: string, amount: number, description?: s
     description,
   };
 
+  const updateFreeMoneyStmt = db.prepare('UPDATE free_money SET amount = ? WHERE id = 1');
   const updateBucketStmt = db.prepare('UPDATE buckets SET balance = ? WHERE id = ?');
-  const updateBalanceStmt = db.prepare('UPDATE total_balance SET amount = ? WHERE id = 1');
   const insertTransactionStmt = db.prepare(`
     INSERT INTO transactions (id, type, amount, bucket_id, bucket_name, timestamp, description)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
 
   const processAll = db.transaction(() => {
+    updateFreeMoneyStmt.run(newFreeMoney);
     updateBucketStmt.run(newBucketBalance, bucketId);
-    updateBalanceStmt.run(newTotalBalance);
     insertTransactionStmt.run(
       transaction.id, 
       transaction.type, 
@@ -213,7 +239,128 @@ export function processPayment(bucketId: string, amount: number, description?: s
 
   return { 
     success: true, 
-    balance: newTotalBalance, 
+    transaction 
+  };
+}
+
+export function processExpense(bucketId: string, amount: number, description?: string): { 
+  success: boolean; 
+  transaction?: Transaction; 
+  error?: string;
+} {
+  const db = getDb();
+  const bucket = getBucketById(bucketId);
+  
+  if (!bucket) {
+    return { success: false, error: 'Bucket not found' };
+  }
+
+  if (bucket.balance < amount) {
+    return { success: false, error: 'Insufficient funds in bucket' };
+  }
+
+  const newBucketBalance = bucket.balance - amount;
+
+  const transaction: Transaction = {
+    id: crypto.randomUUID(),
+    type: 'expense',
+    amount,
+    bucketId,
+    bucketName: bucket.name,
+    timestamp: Date.now(),
+    description,
+  };
+
+  const updateBucketStmt = db.prepare('UPDATE buckets SET balance = ? WHERE id = ?');
+  const insertTransactionStmt = db.prepare(`
+    INSERT INTO transactions (id, type, amount, bucket_id, bucket_name, timestamp, description)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const processAll = db.transaction(() => {
+    updateBucketStmt.run(newBucketBalance, bucketId);
+    insertTransactionStmt.run(
+      transaction.id, 
+      transaction.type, 
+      transaction.amount, 
+      transaction.bucketId, 
+      transaction.bucketName, 
+      transaction.timestamp, 
+      transaction.description || null
+    );
+  });
+
+  processAll();
+
+  return { 
+    success: true, 
+    transaction 
+  };
+}
+
+export function processTransfer(fromBucketId: string, toBucketId: string, amount: number, description?: string): { 
+  success: boolean; 
+  transaction?: Transaction; 
+  error?: string;
+} {
+  const db = getDb();
+  const fromBucket = getBucketById(fromBucketId);
+  const toBucket = getBucketById(toBucketId);
+  
+  if (!fromBucket) {
+    return { success: false, error: 'Source bucket not found' };
+  }
+  
+  if (!toBucket) {
+    return { success: false, error: 'Destination bucket not found' };
+  }
+
+  if (fromBucket.balance < amount) {
+    return { success: false, error: 'Insufficient funds in source bucket' };
+  }
+
+  const newFromBalance = fromBucket.balance - amount;
+  const newToBalance = toBucket.balance + amount;
+
+  const transaction: Transaction = {
+    id: crypto.randomUUID(),
+    type: 'transfer',
+    amount,
+    fromBucketId,
+    fromBucketName: fromBucket.name,
+    toBucketId,
+    toBucketName: toBucket.name,
+    timestamp: Date.now(),
+    description,
+  };
+
+  const updateFromStmt = db.prepare('UPDATE buckets SET balance = ? WHERE id = ?');
+  const updateToStmt = db.prepare('UPDATE buckets SET balance = ? WHERE id = ?');
+  const insertTransactionStmt = db.prepare(`
+    INSERT INTO transactions (id, type, amount, from_bucket_id, from_bucket_name, to_bucket_id, to_bucket_name, timestamp, description)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const processAll = db.transaction(() => {
+    updateFromStmt.run(newFromBalance, fromBucketId);
+    updateToStmt.run(newToBalance, toBucketId);
+    insertTransactionStmt.run(
+      transaction.id, 
+      transaction.type, 
+      transaction.amount, 
+      transaction.fromBucketId, 
+      transaction.fromBucketName, 
+      transaction.toBucketId, 
+      transaction.toBucketName, 
+      transaction.timestamp, 
+      transaction.description || null
+    );
+  });
+
+  processAll();
+
+  return { 
+    success: true, 
     transaction 
   };
 }

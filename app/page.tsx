@@ -6,31 +6,37 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DialogTrigger } from "@/components/ui/dialog";
 import { useBudget } from "@/lib/hooks/useBudget";
 import {
-  AddDepositDialog,
-  AddPaymentDialog,
+  AddIncomeDialog,
+  AddExpenseDialog,
+  AllocateFreeMoneyDialog,
+  TransferDialog,
   CreateBucketDialog,
   BucketsList,
-  BudgetSummary,
+  TransactionList,
 } from "@/components/budget";
-import { Plus, DollarSign, AlertCircle } from "lucide-react";
+import { Plus, DollarSign, AlertCircle, ArrowRightLeft, Wallet, ArrowUpRight } from "lucide-react";
 
 export default function Home() {
   const {
     buckets,
     totalBalance,
-    unallocated,
+    freeMoney,
+    transactions,
     loading,
     error,
     createBucket,
     deleteBucket,
-    updateBucketBalance,
-    deposit,
-    payment,
+    addIncome,
+    allocateFromFreeMoney,
+    addExpense,
+    transfer,
     clearError,
   } = useBudget();
 
-  const [depositDialogOpen, setDepositDialogOpen] = useState(false);
-  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [incomeDialogOpen, setIncomeDialogOpen] = useState(false);
+  const [allocateDialogOpen, setAllocateDialogOpen] = useState(false);
+  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
+  const [transferDialogOpen, setTransferDialogOpen] = useState(false);
   const [bucketDialogOpen, setBucketDialogOpen] = useState(false);
 
   if (loading) {
@@ -57,35 +63,84 @@ export default function Home() {
           </Alert>
         )}
 
-        <BudgetSummary totalBalance={totalBalance} unallocated={unallocated} />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="flex flex-col gap-2 p-6 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl">
+            <div className="flex items-center gap-2 text-blue-700">
+              <Wallet className="h-5 w-5" />
+              <span className="font-semibold">Total Balance</span>
+            </div>
+            <p className="text-4xl font-bold text-blue-900">${totalBalance.toFixed(2)}</p>
+          </div>
+          
+          <div className="flex flex-col gap-2 p-6 bg-gradient-to-br from-green-50 to-green-100 rounded-xl">
+            <div className="flex items-center gap-2 text-green-700">
+              <DollarSign className="h-5 w-5" />
+              <span className="font-semibold">Free Money</span>
+            </div>
+            <p className="text-4xl font-bold text-green-900">${freeMoney.toFixed(2)}</p>
+            <p className="text-sm text-green-600">Available to allocate to buckets</p>
+          </div>
+        </div>
 
         <div className="flex gap-2 flex-wrap">
-          <AddDepositDialog
-            open={depositDialogOpen}
-            onOpenChange={setDepositDialogOpen}
-            onDeposit={deposit}
-          >
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Add Deposit
-              </Button>
-            </DialogTrigger>
-          </AddDepositDialog>
-
-          <AddPaymentDialog
-            open={paymentDialogOpen}
-            onOpenChange={setPaymentDialogOpen}
-            onPayment={payment}
+          <AddIncomeDialog
+            open={incomeDialogOpen}
+            onOpenChange={setIncomeDialogOpen}
+            onAddIncome={addIncome}
+            onAllocate={allocateFromFreeMoney}
+            freeMoney={freeMoney}
             buckets={buckets}
           >
             <DialogTrigger asChild>
               <Button>
-                <DollarSign className="h-4 w-4 mr-2" />
-                Add Payment
+                <Plus className="h-4 w-4 mr-2" />
+                Add Income
               </Button>
             </DialogTrigger>
-          </AddPaymentDialog>
+          </AddIncomeDialog>
+
+          <AllocateFreeMoneyDialog
+            open={allocateDialogOpen}
+            onOpenChange={setAllocateDialogOpen}
+            onAllocate={allocateFromFreeMoney}
+            freeMoney={freeMoney}
+            buckets={buckets}
+          >
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <ArrowUpRight className="h-4 w-4 mr-2" />
+                Allocate
+              </Button>
+            </DialogTrigger>
+          </AllocateFreeMoneyDialog>
+
+          <AddExpenseDialog
+            open={expenseDialogOpen}
+            onOpenChange={setExpenseDialogOpen}
+            onExpense={addExpense}
+            buckets={buckets}
+          >
+            <DialogTrigger asChild>
+              <Button variant="destructive">
+                <DollarSign className="h-4 w-4 mr-2" />
+                Add Expense
+              </Button>
+            </DialogTrigger>
+          </AddExpenseDialog>
+
+          <TransferDialog
+            open={transferDialogOpen}
+            onOpenChange={setTransferDialogOpen}
+            onTransfer={transfer}
+            buckets={buckets}
+          >
+            <DialogTrigger asChild>
+              <Button variant="secondary">
+                <ArrowRightLeft className="h-4 w-4 mr-2" />
+                Transfer
+              </Button>
+            </DialogTrigger>
+          </TransferDialog>
 
           <CreateBucketDialog
             open={bucketDialogOpen}
@@ -106,9 +161,10 @@ export default function Home() {
           <BucketsList
             buckets={buckets}
             onDelete={deleteBucket}
-            onUpdateBalance={updateBucketBalance}
           />
         </div>
+
+        <TransactionList transactions={transactions} />
       </div>
     </div>
   );

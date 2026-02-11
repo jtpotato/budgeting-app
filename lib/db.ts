@@ -82,9 +82,52 @@ export function updateBucket(id: string, updates: Partial<Bucket>): Bucket | nul
 }
 
 export function deleteBucket(id: string): boolean {
-  const stmt = getDb().prepare('DELETE FROM buckets WHERE id = ?');
-  const result = stmt.run(id);
-  return result.changes > 0;
+  const db = getDb();
+
+  const bucket = getBucketById(id);
+  if (!bucket) return false;
+
+  const currentFreeMoney = getFreeMoney();
+  const newFreeMoney = currentFreeMoney + bucket.balance;
+
+  const transaction: Transaction = {
+    id: crypto.randomUUID(),
+    type: 'transfer',
+    amount: bucket.balance,
+    fromBucketId: bucket.id,
+    fromBucketName: bucket.name,
+    toBucketId: 'free-money',
+    toBucketName: 'Free Money',
+    timestamp: Date.now(),
+    description: `Deleted bucket "${bucket.name}" - balance moved to free money`,
+  };
+
+  const deleteStmt = db.prepare('DELETE FROM buckets WHERE id = ?');
+  const updateFreeMoneyStmt = db.prepare('UPDATE free_money SET amount = ? WHERE id = 1');
+  const insertTransactionStmt = db.prepare(`
+    INSERT INTO transactions (id, type, amount, from_bucket_id, from_bucket_name, to_bucket_id, to_bucket_name, timestamp, description)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const processAll = db.transaction(() => {
+    deleteStmt.run(id);
+    updateFreeMoneyStmt.run(newFreeMoney);
+    insertTransactionStmt.run(
+      transaction.id,
+      transaction.type,
+      transaction.amount,
+      transaction.fromBucketId,
+      transaction.fromBucketName,
+      transaction.toBucketId,
+      transaction.toBucketName,
+      transaction.timestamp,
+      transaction.description
+    );
+  });
+
+  processAll();
+
+  return true;
 }
 
 // Transaction operations

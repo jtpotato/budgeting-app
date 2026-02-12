@@ -11,17 +11,12 @@ interface BucketCardProps {
   onDelete: (id: string) => Promise<boolean>;
 }
 
-export function BucketCard({
-  id,
-  name,
-  balance,
-  onDelete,
-}: BucketCardProps) {
+export function BucketCard({ id, name, balance, onDelete }: BucketCardProps) {
   return (
-    <Card className="hover:shadow-lg transition-shadow">
-      <CardHeader className="pb-3">
+    <Card className="">
+      <CardContent>
         <div className="flex items-start justify-between">
-          <CardTitle className="text-lg">{name}</CardTitle>
+          <CardTitle className="text-sm font-normal">{name}</CardTitle>
           <Button
             variant="ghost"
             size="sm"
@@ -31,9 +26,7 @@ export function BucketCard({
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
-      </CardHeader>
-      <CardContent>
-        <p className="text-2xl font-bold text-blue-600">${balance.toFixed(2)}</p>
+        <p className="text-lg font-bold">${balance.toFixed(2)}</p>
       </CardContent>
     </Card>
   );

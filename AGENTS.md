@@ -1,6 +1,6 @@
 # budgeting-app
 
-A bucket/envelope based budgeting app, similar to Up or Actual.
+A bucket/envelope based budgeting app, similar to Up or Actual. Hosted as a service on a private VPS accessible only via Tailnet, for one user only.
 
 ## Tech Stack
 - Next.js

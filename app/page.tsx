@@ -12,6 +12,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 
 type BudgetCategory = {
@@ -53,6 +62,7 @@ export default function Home() {
   const [newCategoryAmount, setNewCategoryAmount] = useState("0");
   const [formError, setFormError] = useState("");
   const [isHydrated, setIsHydrated] = useState(false);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -152,6 +162,7 @@ export default function Home() {
     setNewCategoryName("");
     setNewCategoryAmount("0");
     setFormError("");
+    setIsAddDialogOpen(false);
   };
 
   const removeCategory = (id: string) => {
@@ -190,17 +201,92 @@ export default function Home() {
     );
   };
 
+  const newCategoryAmountValue = parseMoneyInput(newCategoryAmount);
+  const newCategoryPercentOfBalance =
+    balance > 0
+      ? Math.min(100, Math.round((newCategoryAmountValue / balance) * 100))
+      : 0;
+
+  const addCategoryForm = (
+    <form
+      className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_140px_auto]"
+      onSubmit={addCategory}
+    >
+      <div className="space-y-2">
+        <Label htmlFor="category-name">Category Name</Label>
+        <Input
+          id="category-name"
+          placeholder="Groceries"
+          value={newCategoryName}
+          onChange={(event) => {
+            setNewCategoryName(event.target.value);
+            setFormError("");
+          }}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="category-amount">Amount</Label>
+        <Input
+          id="category-amount"
+          type="number"
+          min={0}
+          step="0.01"
+          value={newCategoryAmount}
+          onChange={(event) => {
+            setNewCategoryAmount(event.target.value);
+            setFormError("");
+          }}
+        />
+      </div>
+      <div className="flex items-end">
+        <Button type="submit" className="w-full sm:w-auto">
+          Add
+        </Button>
+      </div>
+
+      <div className="sm:col-span-3 space-y-2">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>New category allocation</span>
+          <span>{newCategoryPercentOfBalance}% of balance</span>
+        </div>
+        <Progress value={newCategoryPercentOfBalance} className="h-2" />
+      </div>
+
+      {formError ? (
+        <p className="sm:col-span-3 text-sm text-destructive">{formError}</p>
+      ) : null}
+    </form>
+  );
+
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-6 p-4 pb-10 sm:p-6">
+    <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-4 p-3 pb-8 sm:gap-6 sm:p-6">
       <Card>
-        <CardHeader>
-          <CardTitle>Bucket Budgeting</CardTitle>
-          <CardDescription>
-            Set your balance, split it into categories, and track what remains.
-          </CardDescription>
+        <CardHeader className="">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-xl">Bucket Budgeting</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
+                Balance, allocation, and remaining.
+              </CardDescription>
+            </div>
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm">Add Category</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add Category</DialogTitle>
+                  <DialogDescription>
+                    Assign part of your remaining balance.
+                  </DialogDescription>
+                </DialogHeader>
+                {addCategoryForm}
+              </DialogContent>
+            </Dialog>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
+        <CardContent className="space-y-3 pt-0">
+          <div className="space-y-1.5">
             <Label htmlFor="balance">Current Balance</Label>
             <Input
               id="balance"
@@ -215,20 +301,24 @@ export default function Home() {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
-            <div className="rounded-md border p-3">
+          <div className="grid grid-cols-3 gap-2 text-xs sm:gap-3 sm:text-sm">
+            <div className="rounded-md border p-2 sm:p-3">
               <p className="text-muted-foreground">Balance</p>
-              <p className="text-lg font-semibold">{formatMoney(balance)}</p>
+              <p className="text-sm font-semibold sm:text-lg">
+                {formatMoney(balance)}
+              </p>
             </div>
-            <div className="rounded-md border p-3">
+            <div className="rounded-md border p-2 sm:p-3">
               <p className="text-muted-foreground">Allocated</p>
-              <p className="text-lg font-semibold">{formatMoney(allocated)}</p>
+              <p className="text-sm font-semibold sm:text-lg">
+                {formatMoney(allocated)}
+              </p>
             </div>
-            <div className="rounded-md border p-3">
+            <div className="rounded-md border p-2 sm:p-3">
               <p className="text-muted-foreground">Remaining</p>
               <p
                 className={cn(
-                  "text-lg font-semibold",
+                  "text-sm font-semibold sm:text-lg",
                   remaining < 0 ? "text-destructive" : "text-foreground",
                 )}
               >
@@ -241,57 +331,6 @@ export default function Home() {
             <p className="text-sm text-destructive">
               You are over budget by {formatMoney(Math.abs(remaining))}.
             </p>
-          ) : null}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Add Category</CardTitle>
-          <CardDescription>
-            Assign part of your remaining balance to a new category.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_160px_auto]"
-            onSubmit={addCategory}
-          >
-            <div className="space-y-2">
-              <Label htmlFor="category-name">Category Name</Label>
-              <Input
-                id="category-name"
-                placeholder="Groceries"
-                value={newCategoryName}
-                onChange={(event) => {
-                  setNewCategoryName(event.target.value);
-                  setFormError("");
-                }}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="category-amount">Amount</Label>
-              <Input
-                id="category-amount"
-                type="number"
-                min={0}
-                step="0.01"
-                value={newCategoryAmount}
-                onChange={(event) => {
-                  setNewCategoryAmount(event.target.value);
-                  setFormError("");
-                }}
-              />
-            </div>
-            <div className="flex items-end">
-              <Button type="submit" className="w-full sm:w-auto">
-                Add
-              </Button>
-            </div>
-          </form>
-
-          {formError ? (
-            <p className="mt-3 text-sm text-destructive">{formError}</p>
           ) : null}
         </CardContent>
       </Card>
@@ -320,31 +359,54 @@ export default function Home() {
               return (
                 <div
                   key={category.id}
-                  className="grid grid-cols-1 gap-2 rounded-md border p-3 sm:grid-cols-[1fr_160px_auto]"
+                  className="grid grid-cols-1 gap-2 rounded-md border p-3"
                 >
-                  <div className="space-y-2">
-                    <Label htmlFor={`name-${category.id}`}>Name</Label>
-                    <Input
-                      id={`name-${category.id}`}
-                      value={category.name}
-                      onChange={(event) =>
-                        updateCategoryName(category.id, event.target.value)
-                      }
-                    />
-                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-2">
+                      <Label htmlFor={`name-${category.id}`}>Name</Label>
+                      <Input
+                        id={`name-${category.id}`}
+                        value={category.name}
+                        onChange={(event) =>
+                          updateCategoryName(category.id, event.target.value)
+                        }
+                      />
+                    </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor={`amount-${category.id}`}>Amount</Label>
-                    <Input
-                      id={`amount-${category.id}`}
-                      type="number"
-                      min={0}
-                      max={maxForCurrent}
-                      step="0.01"
-                      value={category.amount.toString()}
-                      onChange={(event) =>
-                        updateCategoryAmount(category.id, event.target.value)
+                    <div className="space-y-2">
+                      <Label htmlFor={`amount-${category.id}`}>Amount</Label>
+                      <Input
+                        id={`amount-${category.id}`}
+                        type="number"
+                        min={0}
+                        max={maxForCurrent}
+                        step="0.01"
+                        value={category.amount.toString()}
+                        onChange={(event) =>
+                          updateCategoryAmount(category.id, event.target.value)
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>Allocation</span>
+                      <span>
+                        {balance > 0
+                          ? `${Math.min(100, Math.round((category.amount / balance) * 100))}%`
+                          : "0%"}
+                      </span>
+                    </div>
+                    <Progress
+                      value={
+                        balance > 0
+                          ? Math.min(
+                              100,
+                              Math.round((category.amount / balance) * 100),
+                            )
+                          : 0
                       }
+                      className="h-2"
                     />
                   </div>
 

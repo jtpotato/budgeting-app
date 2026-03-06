@@ -63,6 +63,13 @@ export default function Home() {
   const [formError, setFormError] = useState("");
   const [isHydrated, setIsHydrated] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isDepositDialogOpen, setIsDepositDialogOpen] = useState(false);
+  const [depositAmount, setDepositAmount] = useState("0");
+  const [depositError, setDepositError] = useState("");
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState("0");
+  const [paymentCategoryId, setPaymentCategoryId] = useState("");
+  const [paymentError, setPaymentError] = useState("");
 
   useEffect(() => {
     try {
@@ -171,6 +178,73 @@ export default function Home() {
     );
   };
 
+  const handleDeposit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const amount = parseMoneyInput(depositAmount);
+
+    if (amount <= 0) {
+      setDepositError("Deposit amount must be more than $0.00.");
+      return;
+    }
+
+    setBalance((current) => roundToCurrency(current + amount));
+    setDepositAmount("0");
+    setDepositError("");
+    setIsDepositDialogOpen(false);
+  };
+
+  const handlePayment = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const amount = parseMoneyInput(paymentAmount);
+
+    if (amount <= 0) {
+      setPaymentError("Payment amount must be more than $0.00.");
+      return;
+    }
+
+    if (amount > balance) {
+      setPaymentError("Payment amount cannot exceed your current balance.");
+      return;
+    }
+
+    if (paymentCategoryId) {
+      const selectedCategory = categories.find(
+        (category) => category.id === paymentCategoryId,
+      );
+
+      if (!selectedCategory) {
+        setPaymentError("Selected category was not found.");
+        return;
+      }
+
+      if (amount > selectedCategory.amount) {
+        setPaymentError(
+          `Payment amount exceeds ${selectedCategory.name}'s available amount.`,
+        );
+        return;
+      }
+
+      setCategories((current) =>
+        current.map((category) =>
+          category.id === paymentCategoryId
+            ? {
+                ...category,
+                amount: roundToCurrency(Math.max(0, category.amount - amount)),
+              }
+            : category,
+        ),
+      );
+    }
+
+    setBalance((current) => roundToCurrency(Math.max(0, current - amount)));
+    setPaymentAmount("0");
+    setPaymentCategoryId("");
+    setPaymentError("");
+    setIsPaymentDialogOpen(false);
+  };
+
   const updateCategoryAmount = (id: string, nextValue: string) => {
     setCategories((current) => {
       const totalWithoutCategory = roundToCurrency(
@@ -258,6 +332,80 @@ export default function Home() {
     </form>
   );
 
+  const depositForm = (
+    <form className="space-y-4" onSubmit={handleDeposit}>
+      <div className="space-y-2">
+        <Label htmlFor="deposit-amount">Deposit Amount</Label>
+        <Input
+          id="deposit-amount"
+          type="number"
+          min={0}
+          step="0.01"
+          value={depositAmount}
+          onChange={(event) => {
+            setDepositAmount(event.target.value);
+            setDepositError("");
+          }}
+        />
+      </div>
+
+      {depositError ? (
+        <p className="text-sm text-destructive">{depositError}</p>
+      ) : null}
+
+      <Button type="submit" className="w-full sm:w-auto">
+        Save Deposit
+      </Button>
+    </form>
+  );
+
+  const paymentForm = (
+    <form className="space-y-4" onSubmit={handlePayment}>
+      <div className="space-y-2">
+        <Label htmlFor="payment-amount">Payment Amount</Label>
+        <Input
+          id="payment-amount"
+          type="number"
+          min={0}
+          step="0.01"
+          value={paymentAmount}
+          onChange={(event) => {
+            setPaymentAmount(event.target.value);
+            setPaymentError("");
+          }}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="payment-category">Category (Optional)</Label>
+        <select
+          id="payment-category"
+          value={paymentCategoryId}
+          onChange={(event) => {
+            setPaymentCategoryId(event.target.value);
+            setPaymentError("");
+          }}
+          className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          <option value="">No category</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name} ({formatMoney(category.amount)})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {paymentError ? (
+        <p className="text-sm text-destructive">{paymentError}</p>
+      ) : null}
+
+      <Button type="submit" className="w-full sm:w-auto">
+        Save Payment
+      </Button>
+    </form>
+  );
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col gap-4 p-3 pb-8 sm:gap-6 sm:p-6">
       <Card>
@@ -269,20 +417,88 @@ export default function Home() {
                 Balance, allocation, and remaining.
               </CardDescription>
             </div>
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm">Add Category</Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Add Category</DialogTitle>
-                  <DialogDescription>
-                    Assign part of your remaining balance.
-                  </DialogDescription>
-                </DialogHeader>
-                {addCategoryForm}
-              </DialogContent>
-            </Dialog>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Dialog
+                open={isDepositDialogOpen}
+                onOpenChange={(open) => {
+                  setIsDepositDialogOpen(open);
+
+                  if (!open) {
+                    setDepositAmount("0");
+                    setDepositError("");
+                  }
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="secondary">
+                    Deposit
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Deposit</DialogTitle>
+                    <DialogDescription>
+                      Add money into your overall balance.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {depositForm}
+                </DialogContent>
+              </Dialog>
+
+              <Dialog
+                open={isPaymentDialogOpen}
+                onOpenChange={(open) => {
+                  setIsPaymentDialogOpen(open);
+
+                  if (!open) {
+                    setPaymentAmount("0");
+                    setPaymentCategoryId("");
+                    setPaymentError("");
+                  }
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    Payment
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Payment</DialogTitle>
+                    <DialogDescription>
+                      Remove money from the balance and optionally a category.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {paymentForm}
+                </DialogContent>
+              </Dialog>
+
+              <Dialog
+                open={isAddDialogOpen}
+                onOpenChange={(open) => {
+                  setIsAddDialogOpen(open);
+
+                  if (!open) {
+                    setFormError("");
+                    setNewCategoryName("");
+                    setNewCategoryAmount("0");
+                  }
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button size="sm">Add Category</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add Category</DialogTitle>
+                    <DialogDescription>
+                      Assign part of your remaining balance.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {addCategoryForm}
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-3 pt-0">
@@ -290,15 +506,13 @@ export default function Home() {
             <Label htmlFor="balance">Current Balance</Label>
             <Input
               id="balance"
-              type="number"
-              min={0}
-              step="0.01"
-              value={balance.toString()}
-              onChange={(event) => {
-                setBalance(parseMoneyInput(event.target.value));
-                setFormError("");
-              }}
+              type="text"
+              readOnly
+              value={formatMoney(balance)}
             />
+            <p className="text-xs text-muted-foreground">
+              Use Deposit and Payment to update the overall balance.
+            </p>
           </div>
 
           <div className="grid grid-cols-3 gap-2 text-xs sm:gap-3 sm:text-sm">

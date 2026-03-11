@@ -15,10 +15,14 @@ Update this file at the end of each run when behavior, architecture, or workflow
 ## Key Files
 
 - `app/page.tsx`: Main budgeting UI and state logic
+- `components/budget/categories-panel.tsx`: Categories management panel UI
+- `components/budget/transactions-panel.tsx`: Transaction history list panel UI
+- `components/budget/types.ts`: Shared budget data model types
 - `app/layout.tsx`: Global layout, metadata, fonts, SW registration
 - `app/manifest.ts`: PWA manifest metadata
 - `public/sw.js`: Service worker script
 - `components/ui/*`: Reusable UI primitives (button, card, dialog, input, etc.)
+- `components/ui/tabs.tsx`: Reusable tabs primitive for section switching
 - `components/pwa/register-sw.tsx`: Production service worker registration
 
 ## Runtime Behavior
@@ -27,6 +31,7 @@ Update this file at the end of each run when behavior, architecture, or workflow
 - Data model:
   - `balance: number`
   - `categories: { id: string; name: string; amount: number }[]`
+  - `transactions: { id: string; direction: "in" | "out"; amount: number; description: string; categoryId?: string; categoryName?: string; createdAt: string }[]`
 - Currency handling:
   - Values rounded to cents (`roundToCurrency`)
   - User input parsed by `parseMoneyInput` (invalid/negative -> `0`)
@@ -37,6 +42,8 @@ Update this file at the end of each run when behavior, architecture, or workflow
 - Balance updates happen through dialogs:
   - `Deposit`: adds amount to overall balance
   - `Payment`: subtracts amount from overall balance, optionally subtracts from a selected category
+- Deposits and payments are recorded in the transactions history list.
+- Categories and transaction history are shown in a tabbed details section.
 - `Add Category` still allocates from remaining balance.
 - Category amount editing is capped to avoid over-allocation.
 
@@ -70,3 +77,7 @@ Update this file at the end of each run when behavior, architecture, or workflow
   - Locked direct editing of overall balance (read-only display).
   - Payment can optionally deduct from a selected category with validation.
   - Added this `AGENTS.md` living guide.
+- 2026-03-11:
+  - Added a shadcn-style tabs primitive in `components/ui/tabs.tsx`.
+  - Split budget details UI into `components/budget/categories-panel.tsx` and `components/budget/transactions-panel.tsx`.
+  - Added transaction tracking (`in`/`out`) persisted in localStorage and shown in a dedicated Transactions tab.

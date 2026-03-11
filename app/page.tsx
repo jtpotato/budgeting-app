@@ -1,6 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { CategoriesPanel } from "@/components/budget/categories-panel";
+import { TransactionsPanel } from "@/components/budget/transactions-panel";
+import { BudgetCategory, BudgetTransaction } from "@/components/budget/types";
 
 import {
   Card,
@@ -21,17 +24,13 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-
-type BudgetCategory = {
-  id: string;
-  name: string;
-  amount: number;
-};
 
 type PersistedBudget = {
   balance: number;
   categories: BudgetCategory[];
+  transactions: BudgetTransaction[];
 };
 
 const STORAGE_KEY = "bucket-budgeting-state-v1";
@@ -55,9 +54,19 @@ const parseMoneyInput = (value: string) => {
 
 const formatMoney = (value: number) => currencyFormatter.format(value);
 
+const createId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random()}`;
+
+const isTransactionDirection = (
+  value: unknown,
+): value is BudgetTransaction["direction"] => value === "in" || value === "out";
+
 export default function Home() {
   const [balance, setBalance] = useState(0);
   const [categories, setCategories] = useState<BudgetCategory[]>([]);
+  const [transactions, setTransactions] = useState<BudgetTransaction[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryAmount, setNewCategoryAmount] = useState("0");
   const [formError, setFormError] = useState("");
@@ -106,6 +115,42 @@ export default function Home() {
 
         setCategories(sanitizedCategories);
       }
+
+      if (Array.isArray(parsedState.transactions)) {
+        const sanitizedTransactions = parsedState.transactions
+          .filter(
+            (transaction): transaction is BudgetTransaction =>
+              Boolean(transaction) &&
+              typeof transaction.id === "string" &&
+              isTransactionDirection(transaction.direction) &&
+              typeof transaction.amount === "number" &&
+              Number.isFinite(transaction.amount) &&
+              typeof transaction.createdAt === "string",
+          )
+          .map((transaction) => ({
+            id: transaction.id,
+            direction: transaction.direction,
+            amount: Math.max(0, roundToCurrency(transaction.amount)),
+            description:
+              typeof transaction.description === "string" &&
+              transaction.description.trim().length > 0
+                ? transaction.description
+                : transaction.direction === "in"
+                  ? "Deposit"
+                  : "Payment",
+            categoryId:
+              typeof transaction.categoryId === "string"
+                ? transaction.categoryId
+                : undefined,
+            categoryName:
+              typeof transaction.categoryName === "string"
+                ? transaction.categoryName
+                : undefined,
+            createdAt: transaction.createdAt,
+          }));
+
+        setTransactions(sanitizedTransactions);
+      }
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     } finally {
@@ -121,10 +166,11 @@ export default function Home() {
     const stateToPersist: PersistedBudget = {
       balance,
       categories,
+      transactions,
     };
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToPersist));
-  }, [balance, categories, isHydrated]);
+  }, [balance, categories, isHydrated, transactions]);
 
   const allocated = useMemo(
     () =>
@@ -152,10 +198,7 @@ export default function Home() {
       return;
     }
 
-    const categoryId =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random()}`;
+    const categoryId = createId();
 
     setCategories((current) => [
       ...current,
@@ -189,6 +232,16 @@ export default function Home() {
     }
 
     setBalance((current) => roundToCurrency(current + amount));
+    setTransactions((current) => [
+      {
+        id: createId(),
+        direction: "in",
+        amount,
+        description: "Deposit",
+        createdAt: new Date().toISOString(),
+      },
+      ...current,
+    ]);
     setDepositAmount("0");
     setDepositError("");
     setIsDepositDialogOpen(false);
@@ -238,7 +291,23 @@ export default function Home() {
       );
     }
 
+    const selectedCategory = paymentCategoryId
+      ? categories.find((category) => category.id === paymentCategoryId)
+      : undefined;
+
     setBalance((current) => roundToCurrency(Math.max(0, current - amount)));
+    setTransactions((current) => [
+      {
+        id: createId(),
+        direction: "out",
+        amount,
+        description: "Payment",
+        categoryId: selectedCategory?.id,
+        categoryName: selectedCategory?.name,
+        createdAt: new Date().toISOString(),
+      },
+      ...current,
+    ]);
     setPaymentAmount("0");
     setPaymentCategoryId("");
     setPaymentError("");
@@ -502,19 +571,6 @@ export default function Home() {
           </div>
         </CardHeader>
         <CardContent className="space-y-3 pt-0">
-          <div className="space-y-1.5">
-            <Label htmlFor="balance">Current Balance</Label>
-            <Input
-              id="balance"
-              type="text"
-              readOnly
-              value={formatMoney(balance)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Use Deposit and Payment to update the overall balance.
-            </p>
-          </div>
-
           <div className="grid grid-cols-3 gap-2 text-xs sm:gap-3 sm:text-sm">
             <div className="rounded-md border p-2 sm:p-3">
               <p className="text-muted-foreground">Balance</p>
@@ -549,97 +605,31 @@ export default function Home() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Categories</CardTitle>
-          <CardDescription>
-            Edit names and amounts. Category amounts are capped to avoid
-            over-allocation.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {categories.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No categories yet.</p>
-          ) : (
-            categories.map((category) => {
-              const totalWithoutCurrent = roundToCurrency(
-                allocated - category.amount,
-              );
-              const maxForCurrent = Math.max(
-                0,
-                roundToCurrency(balance - totalWithoutCurrent),
-              );
+      <Tabs defaultValue="categories">
+        <TabsList>
+          <TabsTrigger value="categories">Categories</TabsTrigger>
+          <TabsTrigger value="transactions">Transactions</TabsTrigger>
+        </TabsList>
 
-              return (
-                <div
-                  key={category.id}
-                  className="grid grid-cols-1 gap-2 rounded-md border p-3"
-                >
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-2">
-                      <Label htmlFor={`name-${category.id}`}>Name</Label>
-                      <Input
-                        id={`name-${category.id}`}
-                        value={category.name}
-                        onChange={(event) =>
-                          updateCategoryName(category.id, event.target.value)
-                        }
-                      />
-                    </div>
+        <TabsContent value="categories">
+          <CategoriesPanel
+            balance={balance}
+            allocated={allocated}
+            categories={categories}
+            onUpdateCategoryName={updateCategoryName}
+            onUpdateCategoryAmount={updateCategoryAmount}
+            onRemoveCategory={removeCategory}
+          />
+        </TabsContent>
 
-                    <div className="space-y-2">
-                      <Label htmlFor={`amount-${category.id}`}>Amount</Label>
-                      <Input
-                        id={`amount-${category.id}`}
-                        type="number"
-                        min={0}
-                        max={maxForCurrent}
-                        step="0.01"
-                        value={category.amount.toString()}
-                        onChange={(event) =>
-                          updateCategoryAmount(category.id, event.target.value)
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Allocation</span>
-                      <span>
-                        {balance > 0
-                          ? `${Math.min(100, Math.round((category.amount / balance) * 100))}%`
-                          : "0%"}
-                      </span>
-                    </div>
-                    <Progress
-                      value={
-                        balance > 0
-                          ? Math.min(
-                              100,
-                              Math.round((category.amount / balance) * 100),
-                            )
-                          : 0
-                      }
-                      className="h-2"
-                    />
-                  </div>
-
-                  <div className="flex items-end">
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      className="w-full sm:w-auto"
-                      onClick={() => removeCategory(category.id)}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </CardContent>
-      </Card>
+        <TabsContent value="transactions">
+          <TransactionsPanel
+            transactions={transactions}
+            categories={categories}
+            formatMoney={formatMoney}
+          />
+        </TabsContent>
+      </Tabs>
     </main>
   );
 }
